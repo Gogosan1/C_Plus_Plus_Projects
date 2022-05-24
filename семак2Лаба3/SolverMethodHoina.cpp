@@ -1,0 +1,173 @@
+#include "SolverMethodHoina.h"
+#include <iostream>
+
+SolverMethodHoina::SolverMethodHoina()
+	:Name("None"), Behavior(0), NumberOfTimeMoments(0), TimeMomentsNotOnInterval(0)
+{
+	X = new double[0];
+	Y = new double[0];
+	FunctionValue = new double[0];
+}
+
+SolverMethodHoina::SolverMethodHoina(std::string N, unsigned int B, unsigned int TM)
+	: Name(N), Behavior(B), NumberOfTimeMoments(TM + 1), TimeMomentsNotOnInterval(0)
+{
+	X = new double[NumberOfTimeMoments];
+	Y = new double[NumberOfTimeMoments];
+	FunctionValue = new double[NumberOfTimeMoments];
+}
+
+SolverMethodHoina& SolverMethodHoina::operator=(const SolverMethodHoina& Other)
+{
+	// ”чЄт самоприсваивани€ a = a;
+	if (this == &Other)
+		return *this;
+
+	// ”бираемс€ в левом операнде
+	delete[] X;
+	delete[] Y;
+	delete[] FunctionValue;
+
+	// ќсуществл€ем глубокое копирование
+	Name = Other.Name;
+	Behavior = Other.Behavior;
+	NumberOfTimeMoments = Other.NumberOfTimeMoments;
+	X = new double[NumberOfTimeMoments];
+	Y = new double[NumberOfTimeMoments];
+	FunctionValue = new double[NumberOfTimeMoments];
+
+	// ¬озвращаем ссылку на левый операнд
+	return *this;
+}
+
+SolverMethodHoina& SolverMethodHoina::operator=(SolverMethodHoina&& Other)
+{
+	// ”чЄт самоприсваивани€ a = a;
+	if (this == &Other)
+		return *this;
+
+	// ”бираемс€ в левом операнде
+	delete[] X;
+	delete[] Y;
+	delete[] FunctionValue;
+
+	// ќсуществл€ем поверхностное копирование
+	Name = Other.Name;
+	Behavior = Other.Behavior;
+	NumberOfTimeMoments = Other.NumberOfTimeMoments;
+	X = Other.X;
+	Y = Other.Y;
+	FunctionValue = Other.FunctionValue;
+
+	// ѕереводим правый объект в опустошЄнное состо€ние
+	Other.Name = "Default";
+	Behavior = 0;
+	TimeMomentsNotOnInterval = 0;
+	NumberOfTimeMoments = 0;
+	Other.X = nullptr;
+	Other.Y = nullptr;
+	Other.FunctionValue = nullptr;
+
+	return *this;
+}
+
+std::string SolverMethodHoina::GetName() const
+{
+	return std::string(Name);
+}
+
+unsigned int SolverMethodHoina::GetBehavior()const
+{
+	return Behavior;
+}
+
+void SolverMethodHoina::SolverKoshiTask(const TaskKoshi& Task)
+{
+
+	double StepSize = Task.Geth();
+	double YIntermedied, FunctionIntermediedValue;
+	unsigned int i = 1; 
+	
+	// получение общего числа временных моментов, здесь не используетс€, используетс€ в методе вывода
+
+	X[0] = Task.Getx0(); // «адание первоначальных значений
+	Y[0] = Task.Gety0();
+	FunctionValue[0] = Task.CountFunctionValue(X[0], Y[0]);
+
+	if (X[0] < Task.Gett0())
+		TimeMomentsNotOnInterval = 1;
+
+
+	while (X[i] <= Task.GetT())
+	{
+		X[i] = X[i - 1] + StepSize;
+		YIntermedied = Y[i - 1] + StepSize * FunctionValue[i - 1];
+		FunctionIntermediedValue = Task.CountFunctionValue(X[i], YIntermedied);
+		Y[i] = Y[i - 1] + StepSize / 2 * (FunctionValue[i - 1] + FunctionIntermediedValue);
+		FunctionValue[i] = Task.CountFunctionValue(X[i], Y[i]);
+
+		//ѕодсчЄт переменной дл€ вывода тех значений, которые вход€т в интервал
+		if (X[i] < Task.Gett0())
+			TimeMomentsNotOnInterval++;
+
+		// ќсобый случай не поподани€ на конец интервала
+		if ((X[i] + StepSize) > Task.GetT())
+		{
+			switch (Behavior)//// // случаи непопадани€ на границу отрезка
+			{
+			case 1: // случай заканчивани€ в точке T
+
+				if (i == 1) i = 0;
+				// »спользуетс€ дл€ тривиального случа€, когда единственное значение на интервале €вл€етс€ его концом
+
+				StepSize = Task.GetT() - (StepSize * i + X[0]);//изменение величины шага дл€ поподани€ на конец отрезка
+				
+				X[i + 1] = X[i] + StepSize;
+				YIntermedied = Y[i] + StepSize * FunctionValue[i];
+				FunctionIntermediedValue = Task.CountFunctionValue(X[i + 1], YIntermedied);
+				Y[i + 1] = Y[i] + StepSize / 2 * (FunctionValue[i] + FunctionIntermediedValue);
+				FunctionValue[i + 1] = Task.CountFunctionValue(X[i + 1], Y[i + 1]);
+
+				break;
+			case 2: // случай не изменени€ величины шага q > T
+
+		
+				X[i + 1] = X[i] + StepSize;
+				YIntermedied = Y[i] + StepSize * FunctionValue[i];
+				FunctionIntermediedValue = Task.CountFunctionValue(X[i + 1], YIntermedied);
+				Y[i + 1] = Y[i] + StepSize / 2 * (FunctionValue[i] + FunctionIntermediedValue);
+				FunctionValue[i + 1] = Task.CountFunctionValue(X[i + 1], Y[i + 1]);
+
+				break;
+			case 3: // случай заканчивани€ в ближайшей к концу интервала точке q < T
+				NumberOfTimeMoments--;
+				break;
+			default: 
+				NumberOfTimeMoments--;
+				break;
+			}
+			break; // выход из цикла нужен дл€ 3 случа€
+		}
+		i++;
+	}
+}
+
+void SolverMethodHoina::ShowResults() const
+{
+	unsigned int i = TimeMomentsNotOnInterval;
+	
+	for (i; i < NumberOfTimeMoments; i++)
+	{
+		std::cout << "¬ременные моменты: x(t) = " << X[i] << " y(t) = " << Y[i];
+		std::cout << " f[x(t), y(t)] = " << FunctionValue[i] << "\n";
+	}
+}
+
+void SolverMethodHoina::Clean()
+{
+	// возможно стоит принудительно вызывать деструктор
+	Name = "Default";
+	Behavior = 0;
+	TimeMomentsNotOnInterval = 0;
+	NumberOfTimeMoments = 0;
+}
